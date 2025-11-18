@@ -38,11 +38,89 @@ interface ResultadoResposta {
   resposta_correta: number;
 }
 
-// ⚠️ CONFIGURE SEU IP AQUI ⚠️
-// Descubra com: ipconfig (Windows) ou ifconfig (Mac/Linux)
-// Exemplo: http://192.168.1.100:5000/api
-// Para Android Emulator use: http://10.0.2.2:5000/api
-const API_URL = 'http://192.168.1.104:5000/api';
+// 🎯 DADOS MOCKADOS - Banco de perguntas - FIREBASE
+const PERGUNTAS_MOCK: Pergunta[] = [
+  {
+    id: 1,
+    pergunta: "Qual é a capital da França?",
+    opcoes: ["Paris", "Lyon", "Marselha", "Toulouse"],
+    resposta_correta: 0,
+    dificuldade: "fácil",
+    categoria: "Geografia"
+  },
+  {
+    id: 2,
+    pergunta: "Quem pintou a Mona Lisa?",
+    opcoes: ["Michelangelo", "Leonardo da Vinci", "Rafael", "Donatello"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "Arte"
+  },
+  {
+    id: 3,
+    pergunta: "Qual é o maior planeta do Sistema Solar?",
+    opcoes: ["Terra", "Marte", "Júpiter", "Saturno"],
+    resposta_correta: 2,
+    dificuldade: "fácil",
+    categoria: "Ciência"
+  },
+  {
+    id: 4,
+    pergunta: "Em que ano o homem pisou na Lua pela primeira vez?",
+    opcoes: ["1965", "1969", "1972", "1975"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "História"
+  },
+  {
+    id: 5,
+    pergunta: "Qual é o menor país do mundo?",
+    opcoes: ["Mônaco", "Vaticano", "San Marino", "Liechtenstein"],
+    resposta_correta: 1,
+    dificuldade: "difícil",
+    categoria: "Geografia"
+  },
+  {
+    id: 6,
+    pergunta: "Quem escreveu 'Dom Casmurro'?",
+    opcoes: ["José de Alencar", "Machado de Assis", "Castro Alves", "Graciliano Ramos"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "Literatura"
+  },
+  {
+    id: 7,
+    pergunta: "Qual é a velocidade da luz?",
+    opcoes: ["300.000 km/s", "150.000 km/s", "500.000 km/s", "1.000.000 km/s"],
+    resposta_correta: 0,
+    dificuldade: "difícil",
+    categoria: "Ciência"
+  },
+  {
+    id: 8,
+    pergunta: "Quantos continentes existem na Terra?",
+    opcoes: ["5", "6", "7", "8"],
+    resposta_correta: 2,
+    dificuldade: "fácil",
+    categoria: "Geografia"
+  },
+  {
+    id: 9,
+    pergunta: "Quem foi o primeiro presidente do Brasil?",
+    opcoes: ["Dom Pedro II", "Getúlio Vargas", "Marechal Deodoro da Fonseca", "Floriano Peixoto"],
+    resposta_correta: 2,
+    dificuldade: "médio",
+    categoria: "História"
+  },
+  {
+    id: 10,
+    pergunta: "Qual é o elemento químico representado pela letra 'O'?",
+    opcoes: ["Ouro", "Oxigênio", "Ósmio", "Oganesson"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "Química"
+  }
+];
 
 export default function QuizRPG() {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
@@ -51,7 +129,7 @@ export default function QuizRPG() {
   const [loading, setLoading] = useState(true);
   const [respondida, setRespondida] = useState(false);
   const [resultado, setResultado] = useState<ResultadoResposta | null>(null);
-  const [usuarioId] = useState('player1');
+  const [perguntasUsadas, setPerguntasUsadas] = useState<number[]>([]);
 
   // Animações
   const playerHpAnim = useRef(new Animated.Value(stats.hp)).current;
@@ -83,78 +161,115 @@ export default function QuizRPG() {
     }).start();
   }, [inimigo.hp]);
 
-  const carregarPergunta = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/pergunta`);
-      const data = await response.json();
-
-      if (data.sucesso) {
-        setPergunta(data.pergunta);
-        setRespondida(false);
-        setResultado(null);
+  const carregarPergunta = () => {
+    setLoading(true);
+    
+    // Simular delay de rede (300ms)
+    setTimeout(() => {
+      // Pegar perguntas ainda não usadas
+      const disponiveis = PERGUNTAS_MOCK.filter(p => !perguntasUsadas.includes(p.id));
+      
+      // Se acabaram as perguntas, reiniciar o pool
+      if (disponiveis.length === 0) {
+        setPerguntasUsadas([]);
+        const novaPergunta = PERGUNTAS_MOCK[Math.floor(Math.random() * PERGUNTAS_MOCK.length)];
+        setPergunta(novaPergunta);
+        setPerguntasUsadas([novaPergunta.id]);
       } else {
-        Alert.alert('Erro', 'Falha ao carregar pergunta');
+        const novaPergunta = disponiveis[Math.floor(Math.random() * disponiveis.length)];
+        setPergunta(novaPergunta);
+        setPerguntasUsadas(prev => [...prev, novaPergunta.id]);
       }
-    } catch (error) {
-      Alert.alert('Erro de Conexão', `Verifique se o servidor está rodando em ${API_URL}`);
-    } finally {
+      
+      setRespondida(false);
+      setResultado(null);
       setLoading(false);
-    }
+    }, 300);
   };
 
-  const verificarResposta = async (opcaoSelecionada: number) => {
+  const verificarResposta = (opcaoSelecionada: number) => {
     if (!pergunta) return;
 
-    try {
-      const response = await fetch(`${API_URL}/verificar-resposta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pergunta,
-          resposta: opcaoSelecionada,
-          usuario_id: usuarioId,
-        }),
-      });
+    const acertou = opcaoSelecionada === pergunta.resposta_correta;
+    
+    // Calcular dano e XP
+    const danoMap: { [key: string]: number } = { 
+      "fácil": 5, 
+      "médio": 10, 
+      "difícil": 20 
+    };
+    
+    const dano_ao_inimigo = acertou ? danoMap[pergunta.dificuldade] || 10 : 0;
+    const dano_ao_usuario = acertou ? 0 : 5;
+    const xp_ganho = acertou ? (danoMap[pergunta.dificuldade] || 10) * 2 : 0;
 
-      const data: ResultadoResposta = await response.json();
-      setResultado(data);
-      setStats(data.stats);
-      setRespondida(true);
+    // Atualizar stats
+    const novoXp = stats.xp + xp_ganho;
+    const novoHp = Math.max(0, stats.hp - dano_ao_usuario);
+    let novoLevel = stats.level;
+    let xpParaProximo = stats.xp_para_proximo;
+    let levelUp = false;
 
-      // Animar dano
-      if (data.acertou) {
-        animarAcerto(data.dano_ao_inimigo);
-        setInimigo((prev) => ({
-          ...prev,
-          hp: Math.max(0, prev.hp - data.dano_ao_inimigo),
-        }));
+    // Verificar level up
+    let xpRestante = novoXp;
+    while (xpRestante >= xpParaProximo) {
+      novoLevel++;
+      xpRestante -= xpParaProximo;
+      xpParaProximo = Math.floor(xpParaProximo * 1.5);
+      levelUp = true;
+    }
 
-        // Level up
-        if (data.level_up) {
-          animarLevelUp();
+    const novasStats: Stats = {
+      level: novoLevel,
+      xp: xpRestante,
+      hp: levelUp ? 100 : novoHp, // Recupera HP ao subir de level
+      xp_para_proximo: xpParaProximo
+    };
+
+    const resultadoResposta: ResultadoResposta = {
+      acertou,
+      dano_ao_inimigo,
+      dano_ao_usuario,
+      xp_ganho,
+      level_up: levelUp,
+      stats: novasStats,
+      resposta_correta: pergunta.resposta_correta
+    };
+
+    setResultado(resultadoResposta);
+    setStats(novasStats);
+    setRespondida(true);
+
+    // Animar dano
+    if (acertou) {
+      animarAcerto(dano_ao_inimigo);
+      setInimigo((prev) => ({
+        ...prev,
+        hp: Math.max(0, prev.hp - dano_ao_inimigo),
+      }));
+
+      // Level up
+      if (levelUp) {
+        animarLevelUp();
+      }
+    } else {
+      animarErro(dano_ao_usuario);
+    }
+
+    // Próxima pergunta depois de 2 segundos
+    setTimeout(() => {
+      if (novasStats.hp > 0) {
+        if (inimigo.hp - (acertou ? dano_ao_inimigo : 0) <= 0) {
+          novoInimigo();
+        } else {
+          carregarPergunta();
         }
       } else {
-        animarErro(data.dano_ao_usuario);
+        Alert.alert('Game Over', `Você alcançou o Level ${novasStats.level}!`, [
+          { text: 'Recomeçar', onPress: recomecar },
+        ]);
       }
-
-      // Próxima pergunta depois de 2 segundos
-      setTimeout(() => {
-        if (data.stats.hp > 0) {
-          if (inimigo.hp - (data.acertou ? data.dano_ao_inimigo : 0) <= 0) {
-            novoInimigo();
-          } else {
-            carregarPergunta();
-          }
-        } else {
-          Alert.alert('Game Over', `Você alcançou o Level ${data.stats.level}!`, [
-            { text: 'Recomeçar', onPress: recomecar },
-          ]);
-        }
-      }, 2000);
-    } catch (error) {
-      Alert.alert('Erro', 'Falha ao verificar resposta');
-    }
+    }, 2000);
   };
 
   const animarAcerto = (dano: number) => {
@@ -176,7 +291,7 @@ export default function QuizRPG() {
     floatingDamageOpacity.setValue(1);
     Animated.parallel([
       Animated.timing(floatingDamageAnim, {
-        toValue: 50,
+        toValue: -50,
         duration: 1000,
         useNativeDriver: true,
       }),
@@ -224,15 +339,11 @@ export default function QuizRPG() {
     carregarPergunta();
   };
 
-  const recomecar = async () => {
-    try {
-      await fetch(`${API_URL}/reset/${usuarioId}`, { method: 'POST' });
-      setStats({ level: 1, xp: 0, hp: 100, xp_para_proximo: 100 });
-      setInimigo({ hp: 50, maxHp: 50, level: 1 });
-      carregarPergunta();
-    } catch (error) {
-      Alert.alert('Erro', 'Falha ao resetar jogo');
-    }
+  const recomecar = () => {
+    setStats({ level: 1, xp: 0, hp: 100, xp_para_proximo: 100 });
+    setInimigo({ hp: 50, maxHp: 50, level: 1 });
+    setPerguntasUsadas([]);
+    carregarPergunta();
   };
 
   const barraHpColor = (hp: number, maxHp: number) => {
@@ -243,13 +354,15 @@ export default function QuizRPG() {
   };
 
   const playerHpWidth = playerHpAnim.interpolate({
-    inputRange: [0, stats.hp || 1],
+    inputRange: [0, 100],
     outputRange: ['0%', '100%'],
+    extrapolate: 'clamp'
   });
 
   const inimigoHpWidth = inimigoHpAnim.interpolate({
     inputRange: [0, inimigo.maxHp],
     outputRange: ['0%', '100%'],
+    extrapolate: 'clamp'
   });
 
   if (loading) {
@@ -330,9 +443,7 @@ export default function QuizRPG() {
                   backgroundColor:
                     index === resultado?.resposta_correta
                       ? '#4CAF50'
-                      : index === pergunta.resposta_correta
-                      ? '#FF9800'
-                      : '#ccc',
+                      : '#666',
                 },
               ]}
               onPress={() => !respondida && verificarResposta(index)}
@@ -489,7 +600,7 @@ const styles = StyleSheet.create({
   floatingDamage: {
     position: 'absolute',
     top: 60,
-    right: 20,
+    alignSelf: 'center',
     fontSize: 32,
     fontWeight: 'bold',
     color: '#FF6B6B',
