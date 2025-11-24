@@ -38,89 +38,9 @@ interface ResultadoResposta {
   resposta_correta: number;
 }
 
-// 🎯 DADOS MOCKADOS - Banco de perguntas - FIREBASE
-const PERGUNTAS_MOCK: Pergunta[] = [
-  {
-    id: 1,
-    pergunta: "Qual é a capital da França?",
-    opcoes: ["Paris", "Lyon", "Marselha", "Toulouse"],
-    resposta_correta: 0,
-    dificuldade: "fácil",
-    categoria: "Geografia"
-  },
-  {
-    id: 2,
-    pergunta: "Quem pintou a Mona Lisa?",
-    opcoes: ["Michelangelo", "Leonardo da Vinci", "Rafael", "Donatello"],
-    resposta_correta: 1,
-    dificuldade: "médio",
-    categoria: "Arte"
-  },
-  {
-    id: 3,
-    pergunta: "Qual é o maior planeta do Sistema Solar?",
-    opcoes: ["Terra", "Marte", "Júpiter", "Saturno"],
-    resposta_correta: 2,
-    dificuldade: "fácil",
-    categoria: "Ciência"
-  },
-  {
-    id: 4,
-    pergunta: "Em que ano o homem pisou na Lua pela primeira vez?",
-    opcoes: ["1965", "1969", "1972", "1975"],
-    resposta_correta: 1,
-    dificuldade: "médio",
-    categoria: "História"
-  },
-  {
-    id: 5,
-    pergunta: "Qual é o menor país do mundo?",
-    opcoes: ["Mônaco", "Vaticano", "San Marino", "Liechtenstein"],
-    resposta_correta: 1,
-    dificuldade: "difícil",
-    categoria: "Geografia"
-  },
-  {
-    id: 6,
-    pergunta: "Quem escreveu 'Dom Casmurro'?",
-    opcoes: ["José de Alencar", "Machado de Assis", "Castro Alves", "Graciliano Ramos"],
-    resposta_correta: 1,
-    dificuldade: "médio",
-    categoria: "Literatura"
-  },
-  {
-    id: 7,
-    pergunta: "Qual é a velocidade da luz?",
-    opcoes: ["300.000 km/s", "150.000 km/s", "500.000 km/s", "1.000.000 km/s"],
-    resposta_correta: 0,
-    dificuldade: "difícil",
-    categoria: "Ciência"
-  },
-  {
-    id: 8,
-    pergunta: "Quantos continentes existem na Terra?",
-    opcoes: ["5", "6", "7", "8"],
-    resposta_correta: 2,
-    dificuldade: "fácil",
-    categoria: "Geografia"
-  },
-  {
-    id: 9,
-    pergunta: "Quem foi o primeiro presidente do Brasil?",
-    opcoes: ["Dom Pedro II", "Getúlio Vargas", "Marechal Deodoro da Fonseca", "Floriano Peixoto"],
-    resposta_correta: 2,
-    dificuldade: "médio",
-    categoria: "História"
-  },
-  {
-    id: 10,
-    pergunta: "Qual é o elemento químico representado pela letra 'O'?",
-    opcoes: ["Ouro", "Oxigênio", "Ósmio", "Oganesson"],
-    resposta_correta: 1,
-    dificuldade: "fácil",
-    categoria: "Química"
-  }
-];
+// Configuração da API Gemini
+const GEMINI_API_KEY = ''; // Substitua pela sua chave
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
 
 export default function QuizRPG() {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
@@ -129,11 +49,11 @@ export default function QuizRPG() {
   const [loading, setLoading] = useState(true);
   const [respondida, setRespondida] = useState(false);
   const [resultado, setResultado] = useState<ResultadoResposta | null>(null);
-  const [perguntasUsadas, setPerguntasUsadas] = useState<number[]>([]);
+  const [perguntaId, setPerguntaId] = useState(1);
 
   // Animações
-  const playerHpAnim = useRef(new Animated.Value(stats.hp)).current;
-  const inimigoHpAnim = useRef(new Animated.Value(inimigo.hp)).current;
+  const playerHpAnim = useRef(new Animated.Value(100)).current;
+  const inimigoHpAnim = useRef(new Animated.Value(50)).current;
   const damoAnim = useRef(new Animated.Value(0)).current;
   const levelUpScale = useRef(new Animated.Value(0)).current;
   const floatingDamageAnim = useRef(new Animated.Value(0)).current;
@@ -161,30 +81,130 @@ export default function QuizRPG() {
     }).start();
   }, [inimigo.hp]);
 
-  const carregarPergunta = () => {
-    setLoading(true);
-    
-    // Simular delay de rede (300ms)
-    setTimeout(() => {
-      // Pegar perguntas ainda não usadas
-      const disponiveis = PERGUNTAS_MOCK.filter(p => !perguntasUsadas.includes(p.id));
+  const gerarPerguntaComGemini = async (): Promise<Pergunta | null> => {
+    try {
+      // Categorias variadas para diversidade
+      const categorias = ['Geografia', 'História', 'Ciência', 'Matemática', 'Literatura', 'Arte', 'Tecnologia', 'Esportes'];
+      const dificuldades = ['fácil', 'médio', 'difícil'];
       
-      // Se acabaram as perguntas, reiniciar o pool
-      if (disponiveis.length === 0) {
-        setPerguntasUsadas([]);
-        const novaPergunta = PERGUNTAS_MOCK[Math.floor(Math.random() * PERGUNTAS_MOCK.length)];
-        setPergunta(novaPergunta);
-        setPerguntasUsadas([novaPergunta.id]);
-      } else {
-        const novaPergunta = disponiveis[Math.floor(Math.random() * disponiveis.length)];
-        setPergunta(novaPergunta);
-        setPerguntasUsadas(prev => [...prev, novaPergunta.id]);
+      // Seleciona categoria e dificuldade baseado no level
+      const categoria = categorias[Math.floor(Math.random() * categorias.length)];
+      const indexDificuldade = Math.min(Math.floor(stats.level / 3), 2);
+      const dificuldade = dificuldades[indexDificuldade];
+
+      const prompt = `Crie uma pergunta de quiz de múltipla escolha sobre ${categoria} com dificuldade ${dificuldade}.
+
+IMPORTANTE: Retorne APENAS um objeto JSON válido, sem texto adicional, no seguinte formato:
+{
+  "pergunta": "texto da pergunta aqui",
+  "opcoes": ["opção A", "opção B", "opção C", "opção D"],
+  "resposta_correta": 0,
+  "categoria": "${categoria}",
+  "dificuldade": "${dificuldade}"
+}
+
+Regras:
+- A pergunta deve ser clara e objetiva
+- Forneça exatamente 4 opções de resposta
+- resposta_correta deve ser o índice (0-3) da opção correta
+- Todas as opções devem ser plausíveis
+- A pergunta deve ser apropriada para o nível de dificuldade ${dificuldade}`;
+
+      console.log('Fazendo requisição para Gemini...');
+      
+      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.9,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          }
+        })
+      });
+
+      console.log('Status da resposta:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Erro da API:', errorText);
+        throw new Error(`Erro na API: ${response.status} - ${errorText}`);
       }
+
+      const data = await response.json();
+      console.log('Resposta recebida:', JSON.stringify(data, null, 2));
+
+      // Verificar se a resposta tem a estrutura esperada
+      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        throw new Error('Estrutura de resposta inválida da API');
+      }
+
+      const textoResposta = data.candidates[0].content.parts[0].text;
+      console.log('Texto da resposta:', textoResposta);
       
-      setRespondida(false);
-      setResultado(null);
-      setLoading(false);
-    }, 300);
+      // Limpar o texto da resposta (remover markdown se houver)
+      const jsonText = textoResposta
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      
+      const perguntaData = JSON.parse(jsonText);
+
+      // Validar estrutura
+      if (!perguntaData.pergunta || 
+          !Array.isArray(perguntaData.opcoes) || 
+          perguntaData.opcoes.length !== 4 ||
+          typeof perguntaData.resposta_correta !== 'number' ||
+          perguntaData.resposta_correta < 0 || 
+          perguntaData.resposta_correta > 3) {
+        throw new Error('Formato de pergunta inválido');
+      }
+
+      return {
+        id: perguntaId,
+        pergunta: perguntaData.pergunta,
+        opcoes: perguntaData.opcoes,
+        resposta_correta: perguntaData.resposta_correta,
+        dificuldade: perguntaData.dificuldade || dificuldade,
+        categoria: perguntaData.categoria || categoria
+      };
+
+    } catch (error: any) {
+      console.error('Erro completo ao gerar pergunta:', error);
+      console.error('Mensagem de erro:', error.message);
+      console.error('Stack:', error.stack);
+      
+      Alert.alert(
+        'Erro ao Gerar Pergunta',
+        `Detalhes: ${error.message}\n\nVerifique:\n1. Chave API configurada corretamente\n2. Conexão com internet\n3. Console para mais detalhes`,
+        [{ text: 'OK' }]
+      );
+      return null;
+    }
+  };
+
+  const carregarPergunta = async () => {
+    setLoading(true);
+    setRespondida(false);
+    setResultado(null);
+
+    const novaPergunta = await gerarPerguntaComGemini();
+    
+    if (novaPergunta) {
+      setPergunta(novaPergunta);
+      setPerguntaId(prev => prev + 1);
+    }
+    
+    setLoading(false);
   };
 
   const verificarResposta = (opcaoSelecionada: number) => {
@@ -222,7 +242,7 @@ export default function QuizRPG() {
     const novasStats: Stats = {
       level: novoLevel,
       xp: xpRestante,
-      hp: levelUp ? 100 : novoHp, // Recupera HP ao subir de level
+      hp: levelUp ? 100 : novoHp,
       xp_para_proximo: xpParaProximo
     };
 
@@ -248,7 +268,6 @@ export default function QuizRPG() {
         hp: Math.max(0, prev.hp - dano_ao_inimigo),
       }));
 
-      // Level up
       if (levelUp) {
         animarLevelUp();
       }
@@ -286,7 +305,6 @@ export default function QuizRPG() {
       }),
     ]).start();
 
-    // Dano flutuante
     floatingDamageAnim.setValue(0);
     floatingDamageOpacity.setValue(1);
     Animated.parallel([
@@ -342,7 +360,7 @@ export default function QuizRPG() {
   const recomecar = () => {
     setStats({ level: 1, xp: 0, hp: 100, xp_para_proximo: 100 });
     setInimigo({ hp: 50, maxHp: 50, level: 1 });
-    setPerguntasUsadas([]);
+    setPerguntaId(1);
     carregarPergunta();
   };
 
@@ -369,7 +387,9 @@ export default function QuizRPG() {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Carregando...</Text>
+        <Text style={styles.loadingText}>
+          {pergunta ? 'Carregando próxima pergunta...' : 'Gerando pergunta com IA...'}
+        </Text>
       </View>
     );
   }
@@ -430,7 +450,9 @@ export default function QuizRPG() {
 
       {/* Pergunta */}
       <View style={styles.perguntaContainer}>
-        <Text style={styles.categoria}>{pergunta?.categoria.toUpperCase()}</Text>
+        <Text style={styles.categoria}>
+          {pergunta?.categoria.toUpperCase()} • {pergunta?.dificuldade.toUpperCase()}
+        </Text>
         <Text style={styles.perguntaTexto}>{pergunta?.pergunta}</Text>
 
         <View style={styles.opcoesContainer}>
