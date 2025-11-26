@@ -39,8 +39,138 @@ interface ResultadoResposta {
 }
 
 // Configuração da API Gemini
-const GEMINI_API_KEY = ''; // Substitua pela sua chave
+const GEMINI_API_KEY = 'AIzaSyB2g1kWZjd70ks9w3Czt6v940jgtmB4PBA'; // Substitua pela sua chave
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
+
+// Sistema de Rate Limiting
+class RateLimiter {
+  private lastRequestTime: number = 0;
+  private minInterval: number = 30000; // 30 segundos entre requisições (2 por minuto)
+  
+  async waitIfNeeded(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    if (timeSinceLastRequest < this.minInterval) {
+      const waitTime = this.minInterval - timeSinceLastRequest;
+      console.log(`Aguardando ${waitTime}ms para respeitar rate limit...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastRequestTime = Date.now();
+  }
+}
+
+const rateLimiter = new RateLimiter();
+
+// Banco de perguntas fallback (caso a API falhe)
+const PERGUNTAS_FALLBACK: Omit<Pergunta, 'id'>[] = [
+  {
+    pergunta: "Qual é a capital da França?",
+    opcoes: ["Londres", "Paris", "Berlim", "Madri"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "Geografia"
+  },
+  {
+    pergunta: "Quem pintou a Mona Lisa?",
+    opcoes: ["Michelangelo", "Leonardo da Vinci", "Rafael", "Donatello"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "Arte"
+  },
+  {
+    pergunta: "Qual é o maior planeta do Sistema Solar?",
+    opcoes: ["Terra", "Marte", "Júpiter", "Saturno"],
+    resposta_correta: 2,
+    dificuldade: "fácil",
+    categoria: "Ciência"
+  },
+  {
+    pergunta: "Em que ano chegou o homem à Lua?",
+    opcoes: ["1965", "1969", "1972", "1975"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "História"
+  },
+  {
+    pergunta: "Quanto é 8 x 7?",
+    opcoes: ["54", "56", "63", "72"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "Matemática"
+  },
+  {
+    pergunta: "Quem escreveu 'Dom Casmurro'?",
+    opcoes: ["José de Alencar", "Machado de Assis", "Aluísio Azevedo", "Castro Alves"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "Literatura"
+  },
+  {
+    pergunta: "Qual é a fórmula química da água?",
+    opcoes: ["H2O", "CO2", "O2", "NaCl"],
+    resposta_correta: 0,
+    dificuldade: "fácil",
+    categoria: "Ciência"
+  },
+  {
+    pergunta: "Em que continente fica o Egito?",
+    opcoes: ["Ásia", "Europa", "África", "América"],
+    resposta_correta: 2,
+    dificuldade: "fácil",
+    categoria: "Geografia"
+  },
+  {
+    pergunta: "Qual é a linguagem de programação mais usada para web?",
+    opcoes: ["Python", "JavaScript", "Java", "C++"],
+    resposta_correta: 1,
+    dificuldade: "médio",
+    categoria: "Tecnologia"
+  },
+  {
+    pergunta: "Quantos jogadores tem um time de futebol?",
+    opcoes: ["9", "10", "11", "12"],
+    resposta_correta: 2,
+    dificuldade: "fácil",
+    categoria: "Esportes"
+  },
+  {
+    pergunta: "Qual é a velocidade da luz?",
+    opcoes: ["300.000 km/s", "150.000 km/s", "450.000 km/s", "600.000 km/s"],
+    resposta_correta: 0,
+    dificuldade: "médio",
+    categoria: "Ciência"
+  },
+  {
+    pergunta: "Quem descobriu o Brasil?",
+    opcoes: ["Cristóvão Colombo", "Pedro Álvares Cabral", "Vasco da Gama", "Fernão de Magalhães"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "História"
+  },
+  {
+    pergunta: "Qual é a raiz quadrada de 144?",
+    opcoes: ["10", "11", "12", "13"],
+    resposta_correta: 2,
+    dificuldade: "médio",
+    categoria: "Matemática"
+  },
+  {
+    pergunta: "Qual artista é conhecido como o 'Rei do Pop'?",
+    opcoes: ["Elvis Presley", "Michael Jackson", "Prince", "David Bowie"],
+    resposta_correta: 1,
+    dificuldade: "fácil",
+    categoria: "Arte"
+  },
+  {
+    pergunta: "Qual é o menor país do mundo?",
+    opcoes: ["Mônaco", "Vaticano", "San Marino", "Liechtenstein"],
+    resposta_correta: 1,
+    dificuldade: "difícil",
+    categoria: "Geografia"
+  }
+];
 
 export default function QuizRPG() {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
@@ -50,6 +180,9 @@ export default function QuizRPG() {
   const [respondida, setRespondida] = useState(false);
   const [resultado, setResultado] = useState<ResultadoResposta | null>(null);
   const [perguntaId, setPerguntaId] = useState(1);
+  const [waitingForRateLimit, setWaitingForRateLimit] = useState(false);
+  const [usarFallback, setUsarFallback] = useState(false);
+  const perguntasUsadas = useRef<number[]>([]);
 
   // Animações
   const playerHpAnim = useRef(new Animated.Value(100)).current;
@@ -81,15 +214,27 @@ export default function QuizRPG() {
     }).start();
   }, [inimigo.hp]);
 
-  const gerarPerguntaComGemini = async (): Promise<Pergunta | null> => {
+  const gerarPerguntaComGemini = async (retryCount = 0): Promise<Pergunta | null> => {
     try {
+      // Verificar se a chave API está configurada
+      if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === '') {
+        console.log('Chave API não configurada, usando perguntas fallback');
+        setUsarFallback(true);
+        return null;
+      }
+
+      // Aguardar se necessário para respeitar rate limit
+      setWaitingForRateLimit(true);
+      await rateLimiter.waitIfNeeded();
+      setWaitingForRateLimit(false);
+
       // Categorias variadas para diversidade
       const categorias = ['Geografia', 'História', 'Ciência', 'Matemática', 'Literatura', 'Arte', 'Tecnologia', 'Esportes'];
       const dificuldades = ['fácil', 'médio', 'difícil'];
       
       // Seleciona categoria e dificuldade baseado no level
       const categoria = categorias[Math.floor(Math.random() * categorias.length)];
-      const indexDificuldade = Math.min(Math.floor(stats.level / 3), 2);
+      const indexDificuldade = Math.min(Math.floor(stats.level / 2), 2);
       const dificuldade = dificuldades[indexDificuldade];
 
       const prompt = `Crie uma pergunta de quiz de múltipla escolha sobre ${categoria} com dificuldade ${dificuldade}.
@@ -111,6 +256,7 @@ Regras:
 - A pergunta deve ser apropriada para o nível de dificuldade ${dificuldade}`;
 
       console.log('Fazendo requisição para Gemini...');
+      console.log('URL:', GEMINI_API_URL);
       
       const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
@@ -127,28 +273,68 @@ Regras:
             temperature: 0.9,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 1024,
+            maxOutputTokens: 2048, // Aumentado para evitar cortes
           }
         })
       });
 
       console.log('Status da resposta:', response.status);
 
+      // Tratamento específico para erro 429
+      if (response.status === 429) {
+        console.log('Rate limit atingido, mudando para modo fallback');
+        setUsarFallback(true);
+        return null;
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erro da API:', errorText);
-        throw new Error(`Erro na API: ${response.status} - ${errorText}`);
+        let errorText = 'Erro desconhecido';
+        try {
+          const errorData = await response.json();
+          console.error('Erro da API (JSON):', JSON.stringify(errorData, null, 2));
+          errorText = errorData?.error?.message || JSON.stringify(errorData);
+        } catch (e) {
+          errorText = await response.text();
+          console.error('Erro da API (texto):', errorText);
+        }
+        
+        // Se falhar, usar fallback
+        console.log('Erro na API, mudando para modo fallback');
+        setUsarFallback(true);
+        return null;
       }
 
       const data = await response.json();
-      console.log('Resposta recebida:', JSON.stringify(data, null, 2));
+      console.log('Resposta completa:', JSON.stringify(data, null, 2));
 
       // Verificar se a resposta tem a estrutura esperada
-      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        throw new Error('Estrutura de resposta inválida da API');
+      if (!data || typeof data !== 'object') {
+        throw new Error('Resposta da API não é um objeto válido');
       }
 
-      const textoResposta = data.candidates[0].content.parts[0].text;
+      if (!data.candidates || !Array.isArray(data.candidates) || data.candidates.length === 0) {
+        console.error('Estrutura inválida - candidates:', data.candidates);
+        throw new Error('API não retornou candidatos de resposta');
+      }
+
+      const candidate = data.candidates[0];
+      if (!candidate || !candidate.content) {
+        console.error('Estrutura inválida - candidate:', candidate);
+        throw new Error('Candidato de resposta inválido');
+      }
+
+      if (!candidate.content.parts || !Array.isArray(candidate.content.parts) || candidate.content.parts.length === 0) {
+        console.error('Estrutura inválida - parts:', candidate.content.parts);
+        throw new Error('Resposta não contém partes válidas');
+      }
+
+      const textoResposta = candidate.content.parts[0].text;
+      
+      if (!textoResposta || typeof textoResposta !== 'string') {
+        console.error('Texto da resposta inválido:', textoResposta);
+        throw new Error('Texto da resposta é inválido');
+      }
+
       console.log('Texto da resposta:', textoResposta);
       
       // Limpar o texto da resposta (remover markdown se houver)
@@ -157,17 +343,39 @@ Regras:
         .replace(/```\n?/g, '')
         .trim();
       
-      const perguntaData = JSON.parse(jsonText);
+      console.log('JSON limpo:', jsonText);
+      
+      let perguntaData;
+      try {
+        perguntaData = JSON.parse(jsonText);
+      } catch (parseError: any) {
+        console.error('Erro ao fazer parse do JSON:', parseError.message);
+        console.error('JSON que falhou:', jsonText);
+        console.log('Mudando para modo fallback devido a erro de parse');
+        setUsarFallback(true);
+        return null;
+      }
 
       // Validar estrutura
-      if (!perguntaData.pergunta || 
-          !Array.isArray(perguntaData.opcoes) || 
-          perguntaData.opcoes.length !== 4 ||
-          typeof perguntaData.resposta_correta !== 'number' ||
+      if (!perguntaData || typeof perguntaData !== 'object') {
+        throw new Error('Pergunta não é um objeto válido');
+      }
+
+      if (!perguntaData.pergunta || typeof perguntaData.pergunta !== 'string') {
+        throw new Error('Campo "pergunta" inválido');
+      }
+
+      if (!Array.isArray(perguntaData.opcoes) || perguntaData.opcoes.length !== 4) {
+        throw new Error('Campo "opcoes" deve ser um array com 4 itens');
+      }
+
+      if (typeof perguntaData.resposta_correta !== 'number' ||
           perguntaData.resposta_correta < 0 || 
           perguntaData.resposta_correta > 3) {
-        throw new Error('Formato de pergunta inválido');
+        throw new Error('Campo "resposta_correta" deve ser um número entre 0 e 3');
       }
+
+      console.log('Pergunta gerada com sucesso!');
 
       return {
         id: perguntaId,
@@ -179,17 +387,40 @@ Regras:
       };
 
     } catch (error: any) {
-      console.error('Erro completo ao gerar pergunta:', error);
-      console.error('Mensagem de erro:', error.message);
-      console.error('Stack:', error.stack);
+      console.error('Erro ao gerar pergunta:', error.message);
+      console.error('Stack trace:', error.stack);
       
-      Alert.alert(
-        'Erro ao Gerar Pergunta',
-        `Detalhes: ${error.message}\n\nVerifique:\n1. Chave API configurada corretamente\n2. Conexão com internet\n3. Console para mais detalhes`,
-        [{ text: 'OK' }]
-      );
+      // Em caso de erro, usar fallback
+      console.log('Mudando para modo fallback devido a erro');
+      setUsarFallback(true);
       return null;
     }
+  };
+
+  const gerarPerguntaFallback = (): Pergunta => {
+    // Filtrar perguntas disponíveis (não usadas)
+    const disponveis = PERGUNTAS_FALLBACK.filter((_, index) => 
+      !perguntasUsadas.current.includes(index)
+    );
+
+    // Se usou todas, resetar
+    if (disponveis.length === 0) {
+      perguntasUsadas.current = [];
+      return gerarPerguntaFallback();
+    }
+
+    // Selecionar pergunta aleatória
+    const indexAleatorio = Math.floor(Math.random() * disponveis.length);
+    const perguntaSelecionada = disponveis[indexAleatorio];
+    
+    // Marcar como usada
+    const indexOriginal = PERGUNTAS_FALLBACK.indexOf(perguntaSelecionada);
+    perguntasUsadas.current.push(indexOriginal);
+
+    return {
+      id: perguntaId,
+      ...perguntaSelecionada
+    };
   };
 
   const carregarPergunta = async () => {
@@ -197,13 +428,21 @@ Regras:
     setRespondida(false);
     setResultado(null);
 
-    const novaPergunta = await gerarPerguntaComGemini();
-    
-    if (novaPergunta) {
-      setPergunta(novaPergunta);
-      setPerguntaId(prev => prev + 1);
+    let novaPergunta: Pergunta | null = null;
+
+    // Tentar gerar com Gemini primeiro (se não estiver em modo fallback)
+    if (!usarFallback) {
+      novaPergunta = await gerarPerguntaComGemini();
+    }
+
+    // Se falhou ou está em modo fallback, usar perguntas pré-definidas
+    if (!novaPergunta) {
+      console.log('Usando pergunta fallback');
+      novaPergunta = gerarPerguntaFallback();
     }
     
+    setPergunta(novaPergunta);
+    setPerguntaId(prev => prev + 1);
     setLoading(false);
   };
 
@@ -388,7 +627,11 @@ Regras:
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#FF6B6B" />
         <Text style={styles.loadingText}>
-          {pergunta ? 'Carregando próxima pergunta...' : 'Gerando pergunta com IA...'}
+          {waitingForRateLimit 
+            ? 'Aguardando limite de requisições...' 
+            : pergunta 
+              ? 'Carregando próxima pergunta...' 
+              : 'Gerando pergunta com IA...'}
         </Text>
       </View>
     );
@@ -575,6 +818,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 10,
     fontSize: 16,
+    textAlign: 'center',
   },
   inimigoContainer: {
     alignItems: 'center',
