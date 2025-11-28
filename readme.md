@@ -93,11 +93,6 @@ Antes de começar, você precisa ter instalado:
 - **npm**
   - npm vem com Node.js
 
-- **Expo CLI** (opcional, mas recomendado)
-  ```bash
-  npm install -g expo-cli
-  ```
-
 - **Expo Go** (para testar no celular)
   - [Android](https://play.google.com/store/apps/details?id=host.exp.exponent)
   - [iOS](https://apps.apple.com/app/expo-go/id982107779)
