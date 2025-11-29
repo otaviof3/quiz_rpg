@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -174,7 +175,7 @@ const PERGUNTAS_FALLBACK: Omit<Pergunta, 'id'>[] = [
 
 export default function QuizRPG() {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
-  const [stats, setStats] = useState<Stats>({ level: 1, xp: 0, hp: 100, xp_para_proximo: 100 });
+  const [stats, setStats] = useState<Stats>({ level: 1, xp: 0, hp: 100, xp_para_proximo: 50 });
   const [inimigo, setInimigo] = useState({ hp: 50, maxHp: 50, level: 1 });
   const [loading, setLoading] = useState(true);
   const [respondida, setRespondida] = useState(false);
@@ -624,7 +625,7 @@ Regras:
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color="#FF6B6B" />
         <Text style={styles.loadingText}>
           {waitingForRateLimit 
@@ -633,12 +634,12 @@ Regras:
               ? 'Carregando próxima pergunta...' 
               : 'Gerando pergunta com IA...'}
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerStats}>
@@ -777,7 +778,7 @@ Regras:
           <Text style={styles.levelUpLevel}>Nível {stats.level}</Text>
         </Animated.View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
