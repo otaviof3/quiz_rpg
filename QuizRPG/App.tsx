@@ -184,6 +184,8 @@ export default function QuizRPG() {
   const [waitingForRateLimit, setWaitingForRateLimit] = useState(false);
   const [usarFallback, setUsarFallback] = useState(false);
   const perguntasUsadas = useRef<number[]>([]);
+  const ultimaFalhaApi = useRef<number>(0);
+  const FALLBACK_COOLDOWN = 60000; // 1 minuto no fallback antes de tentar API novamente
 
   // Animações
   const playerHpAnim = useRef(new Animated.Value(100)).current;
@@ -192,6 +194,11 @@ export default function QuizRPG() {
   const levelUpScale = useRef(new Animated.Value(0)).current;
   const floatingDamageAnim = useRef(new Animated.Value(0)).current;
   const floatingDamageOpacity = useRef(new Animated.Value(1)).current;
+
+  const podeTentarApiNovamente = () => {
+  const agora = Date.now();
+  return (agora - ultimaFalhaApi.current) > FALLBACK_COOLDOWN;
+};
 
   // Carregar pergunta ao iniciar
   useEffect(() => {
@@ -220,6 +227,7 @@ export default function QuizRPG() {
       // Verificar se a chave API está configurada
       if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === '') {
         console.log('Chave API não configurada, usando perguntas fallback');
+        ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
@@ -284,6 +292,7 @@ Regras:
       // Tratamento específico para erro 429
       if (response.status === 429) {
         console.log('Rate limit atingido, mudando para modo fallback');
+        ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
@@ -301,6 +310,7 @@ Regras:
         
         // Se falhar, usar fallback
         console.log('Erro na API, mudando para modo fallback');
+        ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
@@ -353,6 +363,7 @@ Regras:
         console.error('Erro ao fazer parse do JSON:', parseError.message);
         console.error('JSON que falhou:', jsonText);
         console.log('Mudando para modo fallback devido a erro de parse');
+        ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
@@ -393,6 +404,7 @@ Regras:
       
       // Em caso de erro, usar fallback
       console.log('Mudando para modo fallback devido a erro');
+      ultimaFalhaApi.current = Date.now();
       setUsarFallback(true);
       return null;
     }
@@ -431,17 +443,28 @@ Regras:
 
     let novaPergunta: Pergunta | null = null;
 
-    // Tentar gerar com Gemini primeiro (se não estiver em modo fallback)
-    if (!usarFallback) {
-      novaPergunta = await gerarPerguntaComGemini();
+    // Se estamos em fallback, verificar se já passou cooldown
+    if (usarFallback && podeTentarApiNovamente()) {
+      console.log("Cooldown finalizado — tentando API novamente...");
+      setUsarFallback(false); // libera para tentar API
     }
 
-    // Se falhou ou está em modo fallback, usar perguntas pré-definidas
+    // Tenta API primeiro (desde que não esteja em fallback ativo)
+    if (!usarFallback) {
+      novaPergunta = await gerarPerguntaComGemini();
+
+      // Se a API voltou a funcionar
+      if (novaPergunta !== null) {
+        console.log("A API voltou a responder — saindo do fallback");
+        setUsarFallback(false);
+      }
+    }
+
+    // Se API falhou ou ainda está em fallback → usar fallback temporário
     if (!novaPergunta) {
-      console.log('Usando pergunta fallback');
       novaPergunta = gerarPerguntaFallback();
     }
-    
+
     setPergunta(novaPergunta);
     setPerguntaId(prev => prev + 1);
     setLoading(false);
