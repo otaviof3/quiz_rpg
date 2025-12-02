@@ -188,8 +188,8 @@ npx expo start
 
 ### Sistema de Level Up
 
-- **Level 1 → 2**: 100 XP necessário
-- **Level 2 → 3**: 150 XP necessário
+- **Level 1 → 2**: 50 XP necessário
+- **Level 2 → 3**: 75 XP necessário
 - **Fórmula**: XP necessário × 1.5 a cada nível
 - **Benefício**: HP restaurado para 100
 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useRef } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
-} from 'react-native';
+  ScrollView,
+} from "react-native";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 interface Pergunta {
   id: number;
@@ -40,24 +41,25 @@ interface ResultadoResposta {
 }
 
 // Configuração da API Gemini
-const GEMINI_API_KEY = 'AIzaSyB2g1kWZjd70ks9w3Czt6v940jgtmB4PBA'; // Substitua pela sua chave
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
+const GEMINI_API_KEY = "AIzaSyB2g1kWZjd70ks9w3Czt6v940jgtmB4PBA"; // Substitua pela sua chave
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
 
 // Sistema de Rate Limiting
 class RateLimiter {
   private lastRequestTime: number = 0;
   private minInterval: number = 30000; // 30 segundos entre requisições (2 por minuto)
-  
+
   async waitIfNeeded(): Promise<void> {
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
-    
+
     if (timeSinceLastRequest < this.minInterval) {
       const waitTime = this.minInterval - timeSinceLastRequest;
       console.log(`Aguardando ${waitTime}ms para respeitar rate limit...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
-    
+
     this.lastRequestTime = Date.now();
   }
 }
@@ -65,117 +67,132 @@ class RateLimiter {
 const rateLimiter = new RateLimiter();
 
 // Banco de perguntas fallback (caso a API falhe)
-const PERGUNTAS_FALLBACK: Omit<Pergunta, 'id'>[] = [
+const PERGUNTAS_FALLBACK: Omit<Pergunta, "id">[] = [
   {
     pergunta: "Qual é a capital da França?",
     opcoes: ["Londres", "Paris", "Berlim", "Madri"],
     resposta_correta: 1,
     dificuldade: "fácil",
-    categoria: "Geografia"
+    categoria: "Geografia",
   },
   {
     pergunta: "Quem pintou a Mona Lisa?",
     opcoes: ["Michelangelo", "Leonardo da Vinci", "Rafael", "Donatello"],
     resposta_correta: 1,
     dificuldade: "fácil",
-    categoria: "Arte"
+    categoria: "Arte",
   },
   {
     pergunta: "Qual é o maior planeta do Sistema Solar?",
     opcoes: ["Terra", "Marte", "Júpiter", "Saturno"],
     resposta_correta: 2,
     dificuldade: "fácil",
-    categoria: "Ciência"
+    categoria: "Ciência",
   },
   {
     pergunta: "Em que ano chegou o homem à Lua?",
     opcoes: ["1965", "1969", "1972", "1975"],
     resposta_correta: 1,
     dificuldade: "médio",
-    categoria: "História"
+    categoria: "História",
   },
   {
     pergunta: "Quanto é 8 x 7?",
     opcoes: ["54", "56", "63", "72"],
     resposta_correta: 1,
     dificuldade: "fácil",
-    categoria: "Matemática"
+    categoria: "Matemática",
   },
   {
     pergunta: "Quem escreveu 'Dom Casmurro'?",
-    opcoes: ["José de Alencar", "Machado de Assis", "Aluísio Azevedo", "Castro Alves"],
+    opcoes: [
+      "José de Alencar",
+      "Machado de Assis",
+      "Aluísio Azevedo",
+      "Castro Alves",
+    ],
     resposta_correta: 1,
     dificuldade: "médio",
-    categoria: "Literatura"
+    categoria: "Literatura",
   },
   {
     pergunta: "Qual é a fórmula química da água?",
     opcoes: ["H2O", "CO2", "O2", "NaCl"],
     resposta_correta: 0,
     dificuldade: "fácil",
-    categoria: "Ciência"
+    categoria: "Ciência",
   },
   {
     pergunta: "Em que continente fica o Egito?",
     opcoes: ["Ásia", "Europa", "África", "América"],
     resposta_correta: 2,
     dificuldade: "fácil",
-    categoria: "Geografia"
+    categoria: "Geografia",
   },
   {
     pergunta: "Qual é a linguagem de programação mais usada para web?",
     opcoes: ["Python", "JavaScript", "Java", "C++"],
     resposta_correta: 1,
     dificuldade: "médio",
-    categoria: "Tecnologia"
+    categoria: "Tecnologia",
   },
   {
     pergunta: "Quantos jogadores tem um time de futebol?",
     opcoes: ["9", "10", "11", "12"],
     resposta_correta: 2,
     dificuldade: "fácil",
-    categoria: "Esportes"
+    categoria: "Esportes",
   },
   {
     pergunta: "Qual é a velocidade da luz?",
     opcoes: ["300.000 km/s", "150.000 km/s", "450.000 km/s", "600.000 km/s"],
     resposta_correta: 0,
     dificuldade: "médio",
-    categoria: "Ciência"
+    categoria: "Ciência",
   },
   {
     pergunta: "Quem descobriu o Brasil?",
-    opcoes: ["Cristóvão Colombo", "Pedro Álvares Cabral", "Vasco da Gama", "Fernão de Magalhães"],
+    opcoes: [
+      "Cristóvão Colombo",
+      "Pedro Álvares Cabral",
+      "Vasco da Gama",
+      "Fernão de Magalhães",
+    ],
     resposta_correta: 1,
     dificuldade: "fácil",
-    categoria: "História"
+    categoria: "História",
   },
   {
     pergunta: "Qual é a raiz quadrada de 144?",
     opcoes: ["10", "11", "12", "13"],
     resposta_correta: 2,
     dificuldade: "médio",
-    categoria: "Matemática"
+    categoria: "Matemática",
   },
   {
     pergunta: "Qual artista é conhecido como o 'Rei do Pop'?",
     opcoes: ["Elvis Presley", "Michael Jackson", "Prince", "David Bowie"],
     resposta_correta: 1,
     dificuldade: "fácil",
-    categoria: "Arte"
+    categoria: "Arte",
   },
   {
     pergunta: "Qual é o menor país do mundo?",
     opcoes: ["Mônaco", "Vaticano", "San Marino", "Liechtenstein"],
     resposta_correta: 1,
     dificuldade: "difícil",
-    categoria: "Geografia"
-  }
+    categoria: "Geografia",
+  },
 ];
 
 export default function QuizRPG() {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
-  const [stats, setStats] = useState<Stats>({ level: 1, xp: 0, hp: 100, xp_para_proximo: 50 });
+  const [stats, setStats] = useState<Stats>({
+    level: 1,
+    xp: 0,
+    hp: 100,
+    xp_para_proximo: 50,
+  });
   const [inimigo, setInimigo] = useState({ hp: 50, maxHp: 50, level: 1 });
   const [loading, setLoading] = useState(true);
   const [respondida, setRespondida] = useState(false);
@@ -196,9 +213,9 @@ export default function QuizRPG() {
   const floatingDamageOpacity = useRef(new Animated.Value(1)).current;
 
   const podeTentarApiNovamente = () => {
-  const agora = Date.now();
-  return (agora - ultimaFalhaApi.current) > FALLBACK_COOLDOWN;
-};
+    const agora = Date.now();
+    return agora - ultimaFalhaApi.current > FALLBACK_COOLDOWN;
+  };
 
   // Carregar pergunta ao iniciar
   useEffect(() => {
@@ -222,11 +239,13 @@ export default function QuizRPG() {
     }).start();
   }, [inimigo.hp]);
 
-  const gerarPerguntaComGemini = async (retryCount = 0): Promise<Pergunta | null> => {
+  const gerarPerguntaComGemini = async (
+    retryCount = 0
+  ): Promise<Pergunta | null> => {
     try {
       // Verificar se a chave API está configurada
-      if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === '') {
-        console.log('Chave API não configurada, usando perguntas fallback');
+      if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
+        console.log("Chave API não configurada, usando perguntas fallback");
         ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
@@ -238,11 +257,21 @@ export default function QuizRPG() {
       setWaitingForRateLimit(false);
 
       // Categorias variadas para diversidade
-      const categorias = ['Geografia', 'História', 'Ciência', 'Matemática', 'Literatura', 'Arte', 'Tecnologia', 'Esportes'];
-      const dificuldades = ['fácil', 'médio', 'difícil'];
-      
+      const categorias = [
+        "Geografia",
+        "História",
+        "Ciência",
+        "Matemática",
+        "Literatura",
+        "Arte",
+        "Tecnologia",
+        "Esportes",
+      ];
+      const dificuldades = ["fácil", "médio", "difícil"];
+
       // Seleciona categoria e dificuldade baseado no level
-      const categoria = categorias[Math.floor(Math.random() * categorias.length)];
+      const categoria =
+        categorias[Math.floor(Math.random() * categorias.length)];
       const indexDificuldade = Math.min(Math.floor(stats.level / 2), 2);
       const dificuldade = dificuldades[indexDificuldade];
 
@@ -264,130 +293,152 @@ Regras:
 - Todas as opções devem ser plausíveis
 - A pergunta deve ser apropriada para o nível de dificuldade ${dificuldade}`;
 
-      console.log('Fazendo requisição para Gemini...');
-      console.log('URL:', GEMINI_API_URL);
-      
+      console.log("Fazendo requisição para Gemini...");
+      console.log("URL:", GEMINI_API_URL);
+
       const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
           generationConfig: {
             temperature: 0.9,
             topK: 40,
             topP: 0.95,
             maxOutputTokens: 2048, // Aumentado para evitar cortes
-          }
-        })
+          },
+        }),
       });
 
-      console.log('Status da resposta:', response.status);
+      console.log("Status da resposta:", response.status);
 
       // Tratamento específico para erro 429
       if (response.status === 429) {
-        console.log('Rate limit atingido, mudando para modo fallback');
+        console.log("Rate limit atingido, mudando para modo fallback");
         ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
 
       if (!response.ok) {
-        let errorText = 'Erro desconhecido';
+        let errorText = "Erro desconhecido";
         try {
           const errorData = await response.json();
-          console.error('Erro da API (JSON):', JSON.stringify(errorData, null, 2));
+          console.error(
+            "Erro da API (JSON):",
+            JSON.stringify(errorData, null, 2)
+          );
           errorText = errorData?.error?.message || JSON.stringify(errorData);
         } catch (e) {
           errorText = await response.text();
-          console.error('Erro da API (texto):', errorText);
+          console.error("Erro da API (texto):", errorText);
         }
-        
+
         // Se falhar, usar fallback
-        console.log('Erro na API, mudando para modo fallback');
+        console.log("Erro na API, mudando para modo fallback");
         ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
 
       const data = await response.json();
-      console.log('Resposta completa:', JSON.stringify(data, null, 2));
+      console.log("Resposta completa:", JSON.stringify(data, null, 2));
 
       // Verificar se a resposta tem a estrutura esperada
-      if (!data || typeof data !== 'object') {
-        throw new Error('Resposta da API não é um objeto válido');
+      if (!data || typeof data !== "object") {
+        throw new Error("Resposta da API não é um objeto válido");
       }
 
-      if (!data.candidates || !Array.isArray(data.candidates) || data.candidates.length === 0) {
-        console.error('Estrutura inválida - candidates:', data.candidates);
-        throw new Error('API não retornou candidatos de resposta');
+      if (
+        !data.candidates ||
+        !Array.isArray(data.candidates) ||
+        data.candidates.length === 0
+      ) {
+        console.error("Estrutura inválida - candidates:", data.candidates);
+        throw new Error("API não retornou candidatos de resposta");
       }
 
       const candidate = data.candidates[0];
       if (!candidate || !candidate.content) {
-        console.error('Estrutura inválida - candidate:', candidate);
-        throw new Error('Candidato de resposta inválido');
+        console.error("Estrutura inválida - candidate:", candidate);
+        throw new Error("Candidato de resposta inválido");
       }
 
-      if (!candidate.content.parts || !Array.isArray(candidate.content.parts) || candidate.content.parts.length === 0) {
-        console.error('Estrutura inválida - parts:', candidate.content.parts);
-        throw new Error('Resposta não contém partes válidas');
+      if (
+        !candidate.content.parts ||
+        !Array.isArray(candidate.content.parts) ||
+        candidate.content.parts.length === 0
+      ) {
+        console.error("Estrutura inválida - parts:", candidate.content.parts);
+        throw new Error("Resposta não contém partes válidas");
       }
 
       const textoResposta = candidate.content.parts[0].text;
-      
-      if (!textoResposta || typeof textoResposta !== 'string') {
-        console.error('Texto da resposta inválido:', textoResposta);
-        throw new Error('Texto da resposta é inválido');
+
+      if (!textoResposta || typeof textoResposta !== "string") {
+        console.error("Texto da resposta inválido:", textoResposta);
+        throw new Error("Texto da resposta é inválido");
       }
 
-      console.log('Texto da resposta:', textoResposta);
-      
+      console.log("Texto da resposta:", textoResposta);
+
       // Limpar o texto da resposta (remover markdown se houver)
       const jsonText = textoResposta
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
         .trim();
-      
-      console.log('JSON limpo:', jsonText);
-      
+
+      console.log("JSON limpo:", jsonText);
+
       let perguntaData;
       try {
         perguntaData = JSON.parse(jsonText);
       } catch (parseError: any) {
-        console.error('Erro ao fazer parse do JSON:', parseError.message);
-        console.error('JSON que falhou:', jsonText);
-        console.log('Mudando para modo fallback devido a erro de parse');
+        console.error("Erro ao fazer parse do JSON:", parseError.message);
+        console.error("JSON que falhou:", jsonText);
+        console.log("Mudando para modo fallback devido a erro de parse");
         ultimaFalhaApi.current = Date.now();
         setUsarFallback(true);
         return null;
       }
 
       // Validar estrutura
-      if (!perguntaData || typeof perguntaData !== 'object') {
-        throw new Error('Pergunta não é um objeto válido');
+      if (!perguntaData || typeof perguntaData !== "object") {
+        throw new Error("Pergunta não é um objeto válido");
       }
 
-      if (!perguntaData.pergunta || typeof perguntaData.pergunta !== 'string') {
+      if (!perguntaData.pergunta || typeof perguntaData.pergunta !== "string") {
         throw new Error('Campo "pergunta" inválido');
       }
 
-      if (!Array.isArray(perguntaData.opcoes) || perguntaData.opcoes.length !== 4) {
+      if (
+        !Array.isArray(perguntaData.opcoes) ||
+        perguntaData.opcoes.length !== 4
+      ) {
         throw new Error('Campo "opcoes" deve ser um array com 4 itens');
       }
 
-      if (typeof perguntaData.resposta_correta !== 'number' ||
-          perguntaData.resposta_correta < 0 || 
-          perguntaData.resposta_correta > 3) {
-        throw new Error('Campo "resposta_correta" deve ser um número entre 0 e 3');
+      if (
+        typeof perguntaData.resposta_correta !== "number" ||
+        perguntaData.resposta_correta < 0 ||
+        perguntaData.resposta_correta > 3
+      ) {
+        throw new Error(
+          'Campo "resposta_correta" deve ser um número entre 0 e 3'
+        );
       }
 
-      console.log('Pergunta gerada com sucesso!');
+      console.log("Pergunta gerada com sucesso!");
 
       return {
         id: perguntaId,
@@ -395,15 +446,14 @@ Regras:
         opcoes: perguntaData.opcoes,
         resposta_correta: perguntaData.resposta_correta,
         dificuldade: perguntaData.dificuldade || dificuldade,
-        categoria: perguntaData.categoria || categoria
+        categoria: perguntaData.categoria || categoria,
       };
-
     } catch (error: any) {
-      console.error('Erro ao gerar pergunta:', error.message);
-      console.error('Stack trace:', error.stack);
-      
+      console.error("Erro ao gerar pergunta:", error.message);
+      console.error("Stack trace:", error.stack);
+
       // Em caso de erro, usar fallback
-      console.log('Mudando para modo fallback devido a erro');
+      console.log("Mudando para modo fallback devido a erro");
       ultimaFalhaApi.current = Date.now();
       setUsarFallback(true);
       return null;
@@ -412,8 +462,8 @@ Regras:
 
   const gerarPerguntaFallback = (): Pergunta => {
     // Filtrar perguntas disponíveis (não usadas)
-    const disponveis = PERGUNTAS_FALLBACK.filter((_, index) => 
-      !perguntasUsadas.current.includes(index)
+    const disponveis = PERGUNTAS_FALLBACK.filter(
+      (_, index) => !perguntasUsadas.current.includes(index)
     );
 
     // Se usou todas, resetar
@@ -425,14 +475,14 @@ Regras:
     // Selecionar pergunta aleatória
     const indexAleatorio = Math.floor(Math.random() * disponveis.length);
     const perguntaSelecionada = disponveis[indexAleatorio];
-    
+
     // Marcar como usada
     const indexOriginal = PERGUNTAS_FALLBACK.indexOf(perguntaSelecionada);
     perguntasUsadas.current.push(indexOriginal);
 
     return {
       id: perguntaId,
-      ...perguntaSelecionada
+      ...perguntaSelecionada,
     };
   };
 
@@ -466,7 +516,7 @@ Regras:
     }
 
     setPergunta(novaPergunta);
-    setPerguntaId(prev => prev + 1);
+    setPerguntaId((prev) => prev + 1);
     setLoading(false);
   };
 
@@ -474,14 +524,14 @@ Regras:
     if (!pergunta) return;
 
     const acertou = opcaoSelecionada === pergunta.resposta_correta;
-    
+
     // Calcular dano e XP
-    const danoMap: { [key: string]: number } = { 
-      "fácil": 5, 
-      "médio": 10, 
-      "difícil": 20 
+    const danoMap: { [key: string]: number } = {
+      fácil: 5,
+      médio: 10,
+      difícil: 20,
     };
-    
+
     const dano_ao_inimigo = acertou ? danoMap[pergunta.dificuldade] || 10 : 0;
     const dano_ao_usuario = acertou ? 0 : 5;
     const xp_ganho = acertou ? (danoMap[pergunta.dificuldade] || 10) * 2 : 0;
@@ -506,7 +556,7 @@ Regras:
       level: novoLevel,
       xp: xpRestante,
       hp: levelUp ? 100 : novoHp,
-      xp_para_proximo: xpParaProximo
+      xp_para_proximo: xpParaProximo,
     };
 
     const resultadoResposta: ResultadoResposta = {
@@ -516,7 +566,7 @@ Regras:
       xp_ganho,
       level_up: levelUp,
       stats: novasStats,
-      resposta_correta: pergunta.resposta_correta
+      resposta_correta: pergunta.resposta_correta,
     };
 
     setResultado(resultadoResposta);
@@ -547,8 +597,8 @@ Regras:
           carregarPergunta();
         }
       } else {
-        Alert.alert('Game Over', `Você alcançou o Level ${novasStats.level}!`, [
-          { text: 'Recomeçar', onPress: recomecar },
+        Alert.alert("Game Over", `Você alcançou o Level ${novasStats.level}!`, [
+          { text: "Recomeçar", onPress: recomecar },
         ]);
       }
     }, 2000);
@@ -629,21 +679,21 @@ Regras:
 
   const barraHpColor = (hp: number, maxHp: number) => {
     const percentual = hp / maxHp;
-    if (percentual > 0.5) return '#4CAF50';
-    if (percentual > 0.25) return '#FFC107';
-    return '#F44336';
+    if (percentual > 0.5) return "#4CAF50";
+    if (percentual > 0.25) return "#FFC107";
+    return "#F44336";
   };
 
   const playerHpWidth = playerHpAnim.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-    extrapolate: 'clamp'
+    outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
   });
 
   const inimigoHpWidth = inimigoHpAnim.interpolate({
     inputRange: [0, inimigo.maxHp],
-    outputRange: ['0%', '100%'],
-    extrapolate: 'clamp'
+    outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
   });
 
   if (loading) {
@@ -651,11 +701,11 @@ Regras:
       <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color="#FF6B6B" />
         <Text style={styles.loadingText}>
-          {waitingForRateLimit 
-            ? 'Aguardando limite de requisições...' 
-            : pergunta 
-              ? 'Carregando próxima pergunta...' 
-              : 'Gerando pergunta com IA...'}
+          {waitingForRateLimit
+            ? "Aguardando limite de requisições..."
+            : pergunta
+            ? "Carregando próxima pergunta..."
+            : "Gerando pergunta com IA..."}
         </Text>
       </SafeAreaView>
     );
@@ -673,7 +723,9 @@ Regras:
         </View>
         <Text style={styles.title}>⚔️ Quiz RPG</Text>
         <View style={styles.headerStats}>
-          <Text style={[styles.statText, { color: '#FF6B6B' }]}>❤️ {stats.hp}/100</Text>
+          <Text style={[styles.statText, { color: "#FF6B6B" }]}>
+            ❤️ {stats.hp}/100
+          </Text>
         </View>
       </View>
 
@@ -718,11 +770,17 @@ Regras:
       {/* Pergunta */}
       <View style={styles.perguntaContainer}>
         <Text style={styles.categoria}>
-          {pergunta?.categoria.toUpperCase()} • {pergunta?.dificuldade.toUpperCase()}
+          {pergunta?.categoria.toUpperCase()} •{" "}
+          {pergunta?.dificuldade.toUpperCase()}
         </Text>
         <Text style={styles.perguntaTexto}>{pergunta?.pergunta}</Text>
 
-        <View style={styles.opcoesContainer}>
+        <ScrollView
+          style={styles.opcoesScrollContainer}
+          contentContainerStyle={styles.opcoesContainer}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+        >
           {pergunta?.opcoes.map((opcao, index) => (
             <TouchableOpacity
               key={index}
@@ -731,8 +789,8 @@ Regras:
                 respondida && {
                   backgroundColor:
                     index === resultado?.resposta_correta
-                      ? '#4CAF50'
-                      : '#666',
+                      ? "#4CAF50" // Verde para resposta correta
+                      : "#666", // Cinza para incorretas
                 },
               ]}
               onPress={() => !respondida && verificarResposta(index)}
@@ -742,8 +800,8 @@ Regras:
                 style={[
                   styles.opcaoTexto,
                   respondida && {
-                    color: 'white',
-                    fontWeight: 'bold',
+                    color: "white",
+                    fontWeight: "bold",
                   },
                 ]}
               >
@@ -751,12 +809,22 @@ Regras:
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {respondida && (
-          <View style={[styles.resultadoContainer, { backgroundColor: resultado?.acertou ? '#C8E6C9' : '#FFCDD2' }]}>
-            <Text style={[styles.resultadoTexto, { color: resultado?.acertou ? '#2E7D32' : '#C62828' }]}>
-              {resultado?.acertou ? '✅ ACERTO!' : '❌ ERRO!'}
+          <View
+            style={[
+              styles.resultadoContainer,
+              { backgroundColor: resultado?.acertou ? "#C8E6C9" : "#FFCDD2" },
+            ]}
+          >
+            <Text
+              style={[
+                styles.resultadoTexto,
+                { color: resultado?.acertou ? "#2E7D32" : "#C62828" },
+              ]}
+            >
+              {resultado?.acertou ? "✅ ACERTO!" : "❌ ERRO!"}
             </Text>
             <Text style={styles.resultadoDetalhe}>
               {resultado?.acertou
@@ -781,9 +849,7 @@ Regras:
             ]}
           />
         </View>
-        <Text style={styles.hpText}>
-          {Math.round(stats.hp)}/100
-        </Text>
+        <Text style={styles.hpText}>{Math.round(stats.hp)}/100</Text>
       </View>
 
       {/* Level Up Animation */}
@@ -808,128 +874,135 @@ Regras:
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: "#1a1a2e",
     paddingHorizontal: 16,
     paddingTop: 40,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
   },
   headerStats: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
+    fontWeight: "bold",
+    color: "#FF6B6B",
   },
   statText: {
-    color: '#00D4FF',
+    color: "#00D4FF",
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   xpText: {
-    color: '#FFD700',
+    color: "#FFD700",
     fontSize: 12,
     marginTop: 4,
   },
   loadingText: {
-    color: '#fff',
+    color: "#fff",
     marginTop: 10,
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   inimigoContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   inimigoCard: {
-    backgroundColor: '#16213E',
+    backgroundColor: "#16213E",
     borderRadius: 12,
     padding: 16,
-    width: '100%',
+    width: "100%",
     borderWidth: 2,
-    borderColor: '#FF6B6B',
+    borderColor: "#FF6B6B",
   },
   inimigoNome: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#FF6B6B",
+    textAlign: "center",
   },
   inimigoLevel: {
     fontSize: 14,
-    color: '#FFD700',
-    textAlign: 'center',
+    color: "#FFD700",
+    textAlign: "center",
     marginTop: 4,
   },
   hpBarContainer: {
     height: 24,
-    backgroundColor: '#333',
+    backgroundColor: "#333",
     borderRadius: 12,
     marginVertical: 10,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: '#555',
+    borderColor: "#555",
   },
   hpBar: {
-    height: '100%',
+    height: "100%",
     borderRadius: 12,
   },
   hpText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    textAlign: 'center',
-    fontWeight: 'bold',
+    textAlign: "center",
+    fontWeight: "bold",
   },
   floatingDamage: {
-    position: 'absolute',
+    position: "absolute",
     top: 60,
-    alignSelf: 'center',
+    alignSelf: "center",
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
+    fontWeight: "bold",
+    color: "#FF6B6B",
   },
   perguntaContainer: {
-    backgroundColor: '#16213E',
+    backgroundColor: "#16213E",
     borderRadius: 12,
     padding: 16,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   categoria: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#00D4FF',
+    fontWeight: "bold",
+    color: "#00D4FF",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   perguntaTexto: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: "600",
+    color: "#fff",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
+  },
+  opcoesScrollContainer: {
+    maxHeight: height * 0.35, // Limita a altura máxima (35% da tela)
+    width: "100%",
   },
   opcoesContainer: {
     gap: 10,
+    paddingBottom: 20, // Espaço extra no final para scroll confortável
   },
   opcao: {
-    backgroundColor: '#0F3460',
+    backgroundColor: "#0F3460",
     borderRadius: 10,
     padding: 14,
     borderWidth: 2,
-    borderColor: '#00D4FF',
+    borderColor: "#00D4FF",
+    minHeight: 50, // Altura mínima para consistência
   },
   opcaoTexto: {
-    color: '#00D4FF',
+    color: "#00D4FF",
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
+    lineHeight: 20, // Melhora legibilidade em textos longos
   },
   resultadoContainer: {
     marginTop: 16,
@@ -938,51 +1011,51 @@ const styles = StyleSheet.create({
   },
   resultadoTexto: {
     fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
   },
   resultadoDetalhe: {
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginTop: 4,
   },
   playerContainer: {
-    backgroundColor: '#16213E',
+    backgroundColor: "#16213E",
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: '#00D4FF',
+    borderColor: "#00D4FF",
   },
   playerNome: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#00D4FF',
+    fontWeight: "bold",
+    color: "#00D4FF",
     marginBottom: 8,
   },
   levelUpOverlay: {
-    position: 'absolute',
+    position: "absolute",
     width: width * 0.8,
-    alignSelf: 'center',
+    alignSelf: "center",
     top: height / 2 - 80,
-    backgroundColor: '#FFD700',
+    backgroundColor: "#FFD700",
     borderRadius: 20,
     padding: 30,
-    alignItems: 'center',
+    alignItems: "center",
     zIndex: 1000,
     borderWidth: 3,
-    borderColor: '#FF6B6B',
+    borderColor: "#FF6B6B",
   },
   levelUpText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
+    fontWeight: "bold",
+    color: "#FF6B6B",
   },
   levelUpLevel: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a2e',
+    fontWeight: "bold",
+    color: "#1a1a2e",
     marginTop: 10,
   },
 });
