@@ -2,6 +2,8 @@
 
 Um jogo de quiz educativo com mecânicas de RPG desenvolvido com React Native, Typescript e Expo. Responda perguntas corretamente para derrotar inimigos, ganhar XP e subir de nível!
 
+![Alt text](https://drive.google.com/file/d/1WxSBk4LDjuHelbDXlQdSDFqBeqQ2Xm88/view?usp=sharing)
+
 ## 📋 Índice
 
 - [Sobre o Projeto](#sobre-o-projeto)
